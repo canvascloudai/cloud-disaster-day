@@ -165,11 +165,13 @@ export function WarRoom({
 
                   <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                     <Dialog open={reinforceOpen} onOpenChange={setReinforceOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="flex-1" disabled={busy}>
-                          <ShieldPlus className="size-4" />
-                          Reinforce Architecture
-                        </Button>
+                      <DialogTrigger
+                        render={
+                          <Button variant="outline" className="flex-1" disabled={busy} />
+                        }
+                      >
+                        <ShieldPlus className="size-4" />
+                        Reinforce Architecture
                       </DialogTrigger>
                       <DialogContent className="max-h-[80vh] overflow-y-auto">
                         <DialogHeader>

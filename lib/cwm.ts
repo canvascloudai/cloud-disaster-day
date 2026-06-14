@@ -116,7 +116,7 @@ export interface ChaosResult {
 /** Run a Cloud World Model chaos scenario against a simulation. */
 export async function runChaos(
   simulationId: string | null,
-  scenarioId: string | undefined,
+  scenarioId: string | null | undefined,
   arch: ArchResource[],
   disaster: DisasterDef,
 ): Promise<ChaosResult> {

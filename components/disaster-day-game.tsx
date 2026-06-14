@@ -187,11 +187,11 @@ function Header() {
           </div>
         </div>
         <Dialog>
-          <DialogTrigger asChild>
-            <Button id="open-leaderboard" variant="outline" size="sm">
-              <Trophy className="size-4" />
-              <span className="hidden sm:inline">Leaderboard</span>
-            </Button>
+          <DialogTrigger
+            render={<Button id="open-leaderboard" variant="outline" size="sm" />}
+          >
+            <Trophy className="size-4" />
+            <span className="hidden sm:inline">Leaderboard</span>
           </DialogTrigger>
           <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
