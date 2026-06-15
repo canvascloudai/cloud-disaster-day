@@ -167,10 +167,16 @@ export function DisasterDayGame() {
     setPhase("build")
   }
 
+  function goHome() {
+    setGame(null)
+    setResources(STARTER_STACK)
+    setPhase("start")
+  }
+
   return (
     <div className="min-h-dvh grid-bg">
       <div className="scanlines min-h-dvh">
-        <Header />
+        <Header onHome={goHome} />
         <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6 sm:px-6">
           {phase === "start" && (
             <StartScreen
@@ -217,21 +223,26 @@ export function DisasterDayGame() {
   )
 }
 
-function Header() {
+function Header({ onHome }: { onHome: () => void }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onHome}
+          aria-label="Return to home"
+          className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <CloudLightning className="size-5" />
           </span>
-          <div className="leading-tight">
+          <div className="text-left leading-tight">
             <p className="font-mono text-sm font-semibold tracking-tight">CLOUD DISASTER DAY</p>
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               SRE war-room sim
             </p>
           </div>
-        </div>
+        </button>
         <Dialog>
           <DialogTrigger
             render={<Button id="open-leaderboard" variant="outline" size="sm" />}
