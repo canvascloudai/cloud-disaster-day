@@ -28,6 +28,7 @@ import {
   Swords,
   Skull,
   Wallet,
+  ExternalLink,
 } from "lucide-react"
 
 type Phase = "start" | "build" | "war" | "results"
@@ -260,10 +261,16 @@ function StartScreen({
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[1.2fr_1fr]">
       <div className="pt-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
+        <a
+          href="https://cloudworldmodel.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        >
           <span className="size-2 animate-pulse rounded-full bg-critical" />
           Powered by the Cloud World Model
-        </div>
+          <ExternalLink className="size-3 opacity-60 transition-opacity group-hover:opacity-100" />
+        </a>
         <h1 className="mt-5 text-balance text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
           Build it. Break it. <span className="text-primary">Survive it.</span>
         </h1>
