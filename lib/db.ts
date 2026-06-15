@@ -1,10 +1,11 @@
 import "server-only"
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
+import { DynamoDBClient, DescribeTableCommand } from "@aws-sdk/client-dynamodb"
 import {
   DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
   QueryCommand,
+  ScanCommand,
 } from "@aws-sdk/lib-dynamodb"
 import { awsCredentialsProvider } from "@vercel/functions/oidc"
 import type { GameState, ScoreEntry } from "./types"
@@ -66,6 +67,59 @@ export async function saveScore(entry: ScoreEntry): Promise<ScoreEntry> {
   }
   await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }))
   return entry
+}
+
+export interface TableProof {
+  tableName: string
+  region: string
+  status: string
+  billingMode: string
+  itemCount: number
+  sizeBytes: number
+  keySchema: { name: string; type: string }[]
+  arnMasked: string
+  sampleKeys: { PK: string; SK: string }[]
+}
+
+/** Mask the AWS account id in a table ARN for safe public display. */
+function maskArn(arn?: string): string {
+  if (!arn) return "n/a"
+  return arn.replace(/(\d{4})\d{4}(\d{4})/, "$1****$2")
+}
+
+/** Live, read-only proof that the app is backed by a real DynamoDB table. */
+export async function getTableProof(): Promise<TableProof> {
+  const desc = await client.send(new DescribeTableCommand({ TableName: TABLE_NAME }))
+  const t = desc.Table
+  const attrTypes = new Map((t?.AttributeDefinitions ?? []).map((a) => [a.AttributeName, a.AttributeType]))
+
+  // Pull a few real keys to prove the partition layout is in use.
+  const scan = await docClient.send(
+    new ScanCommand({
+      TableName: TABLE_NAME,
+      ProjectionExpression: "#pk, #sk",
+      ExpressionAttributeNames: { "#pk": PK, "#sk": SK },
+      Limit: 6,
+    }),
+  )
+
+  return {
+    tableName: t?.TableName ?? String(TABLE_NAME),
+    region: process.env.AWS_REGION ?? "n/a",
+    status: t?.TableStatus ?? "n/a",
+    billingMode: t?.BillingModeSummary?.BillingMode ?? "PROVISIONED",
+    itemCount: t?.ItemCount ?? 0,
+    sizeBytes: t?.TableSizeBytes ?? 0,
+    keySchema: (t?.KeySchema ?? []).map((k) => ({
+      name: k.AttributeName ?? "",
+      type: `${attrTypes.get(k.AttributeName ?? "") ?? "S"} · ${k.KeyType}`,
+    })),
+    arnMasked: maskArn(t?.TableArn),
+    sampleKeys: (scan.Items ?? []).map((it) => ({
+      PK: String(it[PK] ?? ""),
+      SK: String(it[SK] ?? ""),
+    })),
+  }
 }
 
 /** Query the leaderboard partition, returning the top N scores descending. */
