@@ -43,8 +43,8 @@ export default function ArchitectureDiagramPage() {
       {/* Fixed-size canvas sized for a clean 16:9 export */}
       <div
         id="diagram"
-        className="flex flex-col gap-8 rounded-xl border border-border bg-card p-10"
-        style={{ width: 1280, height: 720 }}
+        className="flex flex-col gap-6 rounded-xl border border-border bg-card p-10"
+        style={{ width: 1280, height: 800 }}
       >
         {/* Title */}
         <header className="flex items-center justify-between">
@@ -179,6 +179,41 @@ export default function ArchitectureDiagramPage() {
             </div>
           </section>
         </div>
+
+        {/* Legend */}
+        <footer className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Layers className="size-4 text-muted-foreground" />
+            <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              Legend
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <span className="flex items-center">
+                <span className="h-px w-6 bg-primary" />
+                <span className="size-0 border-y-[3px] border-l-[5px] border-y-transparent border-l-primary" />
+              </span>
+              Request / data flow
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="size-3 rounded-sm border border-primary/40 bg-primary/5" />
+              Compute / external API
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="size-3 rounded-sm border border-border bg-secondary/60" />
+              Persistence / storage
+            </span>
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="size-3.5 text-success" />
+              Resilience / auth
+            </span>
+            <span className="flex items-center gap-2">
+              <Database className="size-3.5 text-warning" />
+              AWS database
+            </span>
+          </div>
+        </footer>
       </div>
     </main>
   )
