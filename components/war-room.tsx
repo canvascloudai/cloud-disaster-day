@@ -34,6 +34,8 @@ import {
   Loader2,
   Flag,
   Wrench,
+  Trash2,
+  MinusCircle,
 } from "lucide-react"
 
 export function WarRoom({
@@ -41,15 +43,18 @@ export function WarRoom({
   busy,
   onDisaster,
   onDecision,
+  onDecommission,
   onFinish,
 }: {
   game: GameState
   busy: boolean
   onDisaster: () => void
   onDecision: (serviceKey: string, multiAz: boolean) => void
+  onDecommission: (resourceId: string) => void
   onFinish: () => void
 }) {
   const [reinforceOpen, setReinforceOpen] = useState(false)
+  const [decommissionOpen, setDecommissionOpen] = useState(false)
   const [multiAz, setMultiAz] = useState(false)
 
   const nextKind = game.disasterQueue[game.events.length]
@@ -59,11 +64,17 @@ export function WarRoom({
   const diff = DIFFICULTIES[game.difficulty] ?? DIFFICULTIES.operator
   const remaining = Math.max(0, game.budget - game.spend)
   const budgetPct = Math.min(100, (game.spend / game.budget) * 100)
+  const migrationPenalty = Math.round(60 * diff.scoreMultiplier)
 
   const pickService = (key: string) => {
     onDecision(key, multiAz)
     setReinforceOpen(false)
     setMultiAz(false)
+  }
+
+  const dropResource = (resourceId: string) => {
+    onDecommission(resourceId)
+    setDecommissionOpen(false)
   }
 
   return (
@@ -309,9 +320,66 @@ export function WarRoom({
         {/* Side column: architecture + event log */}
         <div className="space-y-6">
           <section className="rounded-lg border border-border bg-card p-4">
-            <h2 className="mb-3 font-mono text-sm uppercase tracking-widest text-muted-foreground">
-              Architecture ({game.architecture.length})
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
+                Architecture ({game.architecture.length})
+              </h2>
+              <Dialog open={decommissionOpen} onOpenChange={setDecommissionOpen}>
+                <DialogTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-critical"
+                      disabled={busy || allDone || game.architecture.length <= 1}
+                    />
+                  }
+                >
+                  <MinusCircle className="size-3.5" />
+                  Decommission
+                </DialogTrigger>
+                <DialogContent className="max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Decommission a resource</DialogTitle>
+                    <DialogDescription>
+                      Tearing out infrastructure frees budget but costs you a{" "}
+                      <span className="font-mono text-critical">−{migrationPenalty}</span>{" "}
+                      migration penalty and re-runs the simulation.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2">
+                    {game.architecture.map((r) => {
+                      const svc = SERVICE_BY_KEY[r.serviceKey]
+                      const freed = resourceCostPerHour(r)
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => dropResource(r.id)}
+                          className="flex items-center gap-2 rounded-md border border-border bg-card p-3 text-left text-sm transition-colors hover:border-critical/50 hover:bg-critical/5 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ServiceIcon type={r.type} className="size-4 text-primary" />
+                          <span className="flex-1 truncate">
+                            {svc?.short ?? r.name}
+                            {r.count > 1 && (
+                              <span className="text-muted-foreground"> ×{r.count}</span>
+                            )}
+                            {r.multiAz && (
+                              <span className="ml-1 font-mono text-[10px] text-success">AZ</span>
+                            )}
+                          </span>
+                          <span className="font-mono text-[10px] text-success tabular-nums">
+                            +${freed.toFixed(0)}/hr
+                          </span>
+                          <Trash2 className="size-4 text-muted-foreground" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
             <div className="flex flex-wrap gap-2">
               {game.architecture.map((r) => {
                 const svc = SERVICE_BY_KEY[r.serviceKey]

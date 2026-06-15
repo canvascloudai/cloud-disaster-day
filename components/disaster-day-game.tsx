@@ -123,6 +123,28 @@ export function DisasterDayGame() {
     }
   }
 
+  async function decommission(resourceId: string) {
+    if (!game) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/game/${game.id}/decommission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || "Failed")
+      setGame(data.game)
+      toast.success(
+        `Decommissioned. Freed $${Math.abs(data.freed).toFixed(0)}/hr · −${data.penalty} migration penalty.`,
+      )
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function finish() {
     if (!game) return
     setBusy(true)
@@ -175,6 +197,7 @@ export function DisasterDayGame() {
               busy={busy}
               onDisaster={runDisaster}
               onDecision={applyDecision}
+              onDecommission={decommission}
               onFinish={finish}
             />
           )}
