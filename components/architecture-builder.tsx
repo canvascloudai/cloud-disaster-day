@@ -1,14 +1,22 @@
 "use client"
 
 import { useMemo } from "react"
-import { AWS_SERVICES, SERVICE_BY_KEY } from "@/lib/catalog"
+import {
+  AWS_SERVICES,
+  SERVICE_BY_KEY,
+  DIFFICULTIES,
+  architectureCostPerHour,
+  resourceCostPerHour,
+} from "@/lib/catalog"
+import type { Difficulty } from "@/lib/types"
 import { ServiceIcon } from "@/components/service-icon"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Minus, Trash2, Rocket, Loader2 } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { Plus, Minus, Trash2, Rocket, Loader2, ArrowLeft, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface BuilderResource {
@@ -27,18 +35,23 @@ const COST_DOT: Record<string, string> = {
 export function ArchitectureBuilder({
   playerName,
   onPlayerName,
+  difficulty,
   resources,
   onChange,
   onLaunch,
+  onBack,
   launching,
 }: {
   playerName: string
   onPlayerName: (v: string) => void
+  difficulty: Difficulty
   resources: BuilderResource[]
   onChange: (next: BuilderResource[]) => void
   onLaunch: () => void
+  onBack: () => void
   launching: boolean
 }) {
+  const diff = DIFFICULTIES[difficulty]
   const addService = (key: string) => {
     onChange([
       ...resources,
@@ -54,16 +67,34 @@ export function ArchitectureBuilder({
     return types
   }, [resources])
 
-  const canLaunch = resources.length > 0 && playerName.trim().length > 0 && !launching
+  const spend = useMemo(() => architectureCostPerHour(resources), [resources])
+  const overBudget = spend > diff.budget
+  const budgetPct = Math.min(100, (spend / diff.budget) * 100)
+
+  const canLaunch =
+    resources.length > 0 && playerName.trim().length > 0 && !overBudget && !launching
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,420px)]">
       {/* Catalog */}
       <section>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Change threat level
+        </button>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
-            AWS Service Catalog
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
+              AWS Service Catalog
+            </h2>
+            <Badge variant="outline" className="font-mono text-[10px] uppercase">
+              {diff.name}
+            </Badge>
+          </div>
           <span className="font-mono text-xs text-muted-foreground">
             {coverage.size}/8 layers
           </span>
@@ -84,10 +115,15 @@ export function ArchitectureBuilder({
                   <span className="truncate font-medium text-card-foreground">
                     {svc.name}
                   </span>
-                  <span
-                    className={cn("size-2 shrink-0 rounded-full", COST_DOT[svc.costHint])}
-                    title={`${svc.costHint} cost`}
-                  />
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      ${svc.costPerHour}/hr
+                    </span>
+                    <span
+                      className={cn("size-2 rounded-full", COST_DOT[svc.costHint])}
+                      title={`${svc.costHint} cost`}
+                    />
+                  </span>
                 </span>
                 <span className="mt-1 block text-pretty text-xs leading-relaxed text-muted-foreground">
                   {svc.description}
@@ -124,6 +160,33 @@ export function ArchitectureBuilder({
           </Badge>
         </div>
 
+        {/* Budget meter */}
+        <div className="px-4 pt-3">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 font-mono uppercase tracking-wider text-muted-foreground">
+              <Wallet className="size-3.5" />
+              Operating budget
+            </span>
+            <span
+              className={cn(
+                "font-mono tabular-nums",
+                overBudget ? "text-critical" : "text-foreground",
+              )}
+            >
+              ${spend.toFixed(0)} / ${diff.budget}/hr
+            </span>
+          </div>
+          <Progress
+            value={budgetPct}
+            className={cn("h-1.5", overBudget && "[&>*]:bg-critical")}
+          />
+          {overBudget && (
+            <p className="mt-1.5 font-mono text-[11px] text-critical">
+              Over budget by ${(spend - diff.budget).toFixed(0)}/hr — trim the stack to launch.
+            </p>
+          )}
+        </div>
+
         <div className="flex-1 space-y-2 p-4">
           {resources.length === 0 && (
             <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -141,6 +204,9 @@ export function ArchitectureBuilder({
                 <div className="flex items-center gap-2">
                   <ServiceIcon type={svc.cwmType} className="size-4 text-primary" />
                   <span className="flex-1 truncate text-sm font-medium">{svc.short}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                    ${resourceCostPerHour(r).toFixed(0)}/hr
+                  </span>
                   <button
                     type="button"
                     onClick={() => remove(r.uid)}

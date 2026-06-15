@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { nanoid } from "nanoid"
 import { getGame, saveGame } from "@/lib/db"
 import { createSimulation, stepSimulation } from "@/lib/cwm"
-import { SERVICE_BY_KEY } from "@/lib/catalog"
+import { SERVICE_BY_KEY, resourceCostPerHour, architectureCostPerHour } from "@/lib/catalog"
 import type { ArchResource } from "@/lib/types"
 
 // Apply an architecture decision (add a new service) mid-game.
@@ -31,6 +31,19 @@ export async function POST(
       count: 1,
       multiAz,
     }
+
+    // Enforce the budget ceiling: reinforcements can't exceed $/hr budget.
+    const addedCost = resourceCostPerHour({ serviceKey: def.key, count: 1, multiAz })
+    const newSpend = Math.round((game.spend + addedCost) * 100) / 100
+    if (newSpend > game.budget) {
+      return NextResponse.json(
+        {
+          error: `${def.name}${multiAz ? " (Multi-AZ)" : ""} costs $${addedCost.toFixed(0)}/hr — that would push you to $${newSpend.toFixed(0)}/hr, over your $${game.budget}/hr budget.`,
+        },
+        { status: 400 },
+      )
+    }
+
     const architecture = [...game.architecture, newResource]
 
     // Rebuild the simulation with the upgraded architecture.
@@ -47,11 +60,12 @@ export async function POST(
     game.architecture = architecture
     game.simulationId = simulationId
     game.metrics = metrics
+    game.spend = architectureCostPerHour(architecture)
     game.usedFallback = game.usedFallback || createFallback || stepFallback
     game.decisions.push({
       at: Date.now(),
       label: `Added ${def.name}${multiAz ? " (Multi-AZ)" : ""}`,
-      cost: 0,
+      cost: addedCost,
     })
     game.updatedAt = Date.now()
 

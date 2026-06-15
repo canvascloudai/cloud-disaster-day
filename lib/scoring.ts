@@ -2,21 +2,31 @@ import type { SimMetrics } from "./types"
 
 /**
  * Points awarded for surviving a single disaster round.
- * Combines chaos resilience with live operational metrics (uptime, latency, cost).
+ * Combines chaos resilience with live operational metrics (uptime, latency, cost),
+ * scaled by difficulty and penalized for spending close to the budget ceiling.
+ *
+ * @param budgetPressure ratio of current spend to budget (0–1+); over 1 means over budget.
+ * @param scoreMultiplier difficulty multiplier applied to the round total.
  */
 export function scoreRound(
   resilience: number,
   passed: boolean,
   metrics: SimMetrics,
+  budgetPressure = 0,
+  scoreMultiplier = 1,
 ): number {
   const uptime = Math.max(0, 100 - metrics.errorRate) // % successful
   const latencyScore = clamp(100 - metrics.latencyP95 / 6, 0, 100)
-  const costScore = clamp(100 - metrics.costPerHour * 2.5, 0, 100)
+  // Reward efficient designs: the closer to (or over) budget, the less the cost bonus.
+  const efficiencyScore = clamp(100 - budgetPressure * 90, 0, 100)
 
   const base =
-    resilience * 6 + uptime * 1.5 + latencyScore * 0.8 + costScore * 0.6
+    resilience * 6 + uptime * 1.5 + latencyScore * 0.8 + efficiencyScore * 0.6
   const bonus = passed ? 150 : 0
-  return Math.max(0, Math.round(base + bonus))
+  // Going over budget bleeds points.
+  const overBudgetPenalty = budgetPressure > 1 ? (budgetPressure - 1) * 400 : 0
+  const total = (base + bonus - overBudgetPenalty) * scoreMultiplier
+  return Math.max(0, Math.round(total))
 }
 
 /** Letter grade for a resilience value. */

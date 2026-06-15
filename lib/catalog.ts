@@ -1,4 +1,10 @@
-import type { ServiceDef, DisasterDef, DisasterKind } from "./types"
+import type {
+  ServiceDef,
+  DisasterDef,
+  DisasterKind,
+  Difficulty,
+  DifficultyConfig,
+} from "./types"
 
 /** The AWS services a player can compose into an architecture. */
 export const AWS_SERVICES: ServiceDef[] = [
@@ -9,6 +15,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "compute",
     description: "General-purpose compute instances for your application tier.",
     costHint: "medium",
+    costPerHour: 4,
   },
   {
     key: "eks",
@@ -17,6 +24,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "kubernetes",
     description: "Auto-scaling container orchestration that absorbs traffic spikes.",
     costHint: "high",
+    costPerHour: 9,
   },
   {
     key: "dynamodb",
@@ -25,6 +33,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "database",
     description: "Serverless NoSQL key-value store with on-demand throughput.",
     costHint: "medium",
+    costPerHour: 3,
   },
   {
     key: "rds",
@@ -33,6 +42,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "database",
     description: "Managed relational database with automated backups and failover.",
     costHint: "high",
+    costPerHour: 11,
   },
   {
     key: "elasticache",
@@ -41,6 +51,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "cache",
     description: "In-memory cache that shields databases from read pressure.",
     costHint: "medium",
+    costPerHour: 5,
   },
   {
     key: "sqs",
@@ -49,6 +60,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "queue",
     description: "Managed message queue that buffers bursts and smooths backlogs.",
     costHint: "low",
+    costPerHour: 1.5,
   },
   {
     key: "elb",
@@ -57,6 +69,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "network",
     description: "Distributes traffic across instances and availability zones.",
     costHint: "low",
+    costPerHour: 2,
   },
   {
     key: "cloudfront",
@@ -65,6 +78,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "network",
     description: "Edge caching that offloads origin traffic during spikes.",
     costHint: "medium",
+    costPerHour: 3,
   },
   {
     key: "s3",
@@ -73,6 +87,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "storage",
     description: "Durable object storage for backups, assets, and recovery points.",
     costHint: "low",
+    costPerHour: 1,
   },
   {
     key: "backup",
@@ -81,6 +96,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "storage",
     description: "Point-in-time snapshots enabling recovery from data corruption.",
     costHint: "low",
+    costPerHour: 1.5,
   },
   {
     key: "waf",
@@ -89,6 +105,7 @@ export const AWS_SERVICES: ServiceDef[] = [
     cwmType: "security",
     description: "Filters malicious traffic and absorbs volumetric attacks.",
     costHint: "medium",
+    costPerHour: 4,
   },
 ]
 
@@ -160,8 +177,7 @@ export const DISASTERS: Record<DisasterKind, DisasterDef> = {
   },
 }
 
-/** Fixed order disasters strike during a run. */
-export const DISASTER_ORDER: DisasterKind[] = [
+export const ALL_DISASTERS: DisasterKind[] = [
   "traffic_spike",
   "dynamo_throttle",
   "queue_backlog",
@@ -169,3 +185,83 @@ export const DISASTER_ORDER: DisasterKind[] = [
   "db_corruption",
   "cost_explosion",
 ]
+
+/** The three difficulty tiers that reshape budget, disaster count, and scoring. */
+export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
+  recruit: {
+    key: "recruit",
+    name: "Recruit",
+    tagline: "Generous budget · 4 disasters · forgiving",
+    budget: 95,
+    disasterCount: 4,
+    trafficScale: 0.8,
+    escalationStep: 0.05,
+    passThreshold: 62,
+    scoreMultiplier: 1,
+  },
+  operator: {
+    key: "operator",
+    name: "Operator",
+    tagline: "Tight budget · 6 disasters · realistic",
+    budget: 65,
+    disasterCount: 6,
+    trafficScale: 1,
+    escalationStep: 0.12,
+    passThreshold: 70,
+    scoreMultiplier: 1.6,
+  },
+  chaos_lord: {
+    key: "chaos_lord",
+    name: "Chaos Lord",
+    tagline: "Lean budget · 8 disasters · escalating hell",
+    budget: 48,
+    disasterCount: 8,
+    trafficScale: 1.35,
+    escalationStep: 0.22,
+    passThreshold: 78,
+    scoreMultiplier: 2.6,
+  },
+}
+
+/** Deterministic-ish shuffle using Math.random (server-side, per game). */
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/**
+ * Build the randomized disaster queue for a run. Uses all six disasters
+ * shuffled; if the difficulty demands more rounds than there are disasters,
+ * additional random disasters are appended (repeats allowed).
+ */
+export function buildDisasterQueue(difficulty: Difficulty): DisasterKind[] {
+  const count = DIFFICULTIES[difficulty].disasterCount
+  const queue = shuffle(ALL_DISASTERS).slice(0, Math.min(count, ALL_DISASTERS.length))
+  while (queue.length < count) {
+    queue.push(ALL_DISASTERS[Math.floor(Math.random() * ALL_DISASTERS.length)])
+  }
+  return queue
+}
+
+/** Operating cost of a single resource in $/hr (Multi-AZ doubles it). */
+export function resourceCostPerHour(resource: {
+  serviceKey: string
+  count: number
+  multiAz: boolean
+}): number {
+  const def = SERVICE_BY_KEY[resource.serviceKey]
+  if (!def) return 0
+  const azFactor = resource.multiAz ? 2 : 1
+  return def.costPerHour * resource.count * azFactor
+}
+
+/** Total operating cost of an architecture in $/hr. */
+export function architectureCostPerHour(
+  arch: Array<{ serviceKey: string; count: number; multiAz: boolean }>,
+): number {
+  return Math.round(arch.reduce((sum, r) => sum + resourceCostPerHour(r), 0) * 100) / 100
+}

@@ -2,7 +2,7 @@
 
 import type { GameState } from "@/lib/types"
 import { grade } from "@/lib/scoring"
-import { DISASTERS } from "@/lib/catalog"
+import { DISASTERS, DIFFICULTIES } from "@/lib/catalog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -32,13 +32,19 @@ export function ResultsScreen({
       ? Math.round(game.events.reduce((a, e) => a + e.resilienceScore, 0) / game.events.length)
       : 0
   const g = grade(avgResilience)
+  const diff = DIFFICULTIES[game.difficulty] ?? DIFFICULTIES.operator
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="rounded-xl border border-border bg-card p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          After-action report
-        </p>
+        <div className="flex items-center justify-center gap-2">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            After-action report
+          </p>
+          <Badge variant="outline" className="font-mono text-[10px] uppercase">
+            {diff.name} · {diff.scoreMultiplier}×
+          </Badge>
+        </div>
         <div className={cn("mt-2 font-mono text-7xl font-bold leading-none", GRADE_COLOR[g])}>
           {g}
         </div>
@@ -60,9 +66,10 @@ export function ResultsScreen({
           </div>
           <div>
             <p className="font-mono text-2xl font-semibold">
-              ${game.metrics?.costPerHour.toFixed(2) ?? "0.00"}
+              ${game.spend?.toFixed(0) ?? "0"}
+              <span className="text-base text-muted-foreground">/${game.budget}</span>
             </p>
-            <p className="text-xs text-muted-foreground">final $/hr</p>
+            <p className="text-xs text-muted-foreground">budget $/hr</p>
           </div>
         </div>
       </div>

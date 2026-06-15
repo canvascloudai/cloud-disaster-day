@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { nanoid } from "nanoid"
 import { getGame, saveGame } from "@/lib/db"
 import { runChaos, stepSimulation } from "@/lib/cwm"
-import { DISASTERS } from "@/lib/catalog"
+import { DISASTERS, DIFFICULTIES } from "@/lib/catalog"
 import { scoreRound } from "@/lib/scoring"
-import type { DisasterKind, GameEvent } from "@/lib/types"
+import type { GameEvent } from "@/lib/types"
 
-// Inject a disaster: elevate traffic, run the chaos scenario, score the round.
+// Inject the next queued disaster: elevate traffic, run chaos, score the round.
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -19,21 +19,20 @@ export async function POST(
       return NextResponse.json({ error: "Game already completed." }, { status: 409 })
     }
 
-    const body = await req.json()
-    const kind = String(body?.disaster) as DisasterKind
-    const disaster = DISASTERS[kind]
+    const roundIndex = game.events.length
+    const kind = game.disasterQueue[roundIndex]
+    const disaster = kind ? DISASTERS[kind] : undefined
     if (!disaster) {
-      return NextResponse.json({ error: "Unknown disaster." }, { status: 400 })
-    }
-    if (game.events.some((e) => e.disaster === kind)) {
-      return NextResponse.json(
-        { error: "That disaster has already struck." },
-        { status: 409 },
-      )
+      return NextResponse.json({ error: "No disasters remaining." }, { status: 409 })
     }
 
-    // Spike the traffic for this disaster, then run the chaos scenario.
-    const surgeRPS = Math.round(game.baselineRPS * disaster.trafficMultiplier)
+    const diff = DIFFICULTIES[game.difficulty] ?? DIFFICULTIES.operator
+
+    // Traffic escalates each round and scales with difficulty.
+    const escalation = 1 + roundIndex * diff.escalationStep
+    const surgeRPS = Math.round(
+      game.baselineRPS * disaster.trafficMultiplier * diff.trafficScale * escalation,
+    )
     const step = await stepSimulation(game.simulationId, surgeRPS, game.architecture)
     const chaos = await runChaos(
       game.simulationId,
@@ -42,7 +41,16 @@ export async function POST(
       disaster,
     )
 
-    const points = scoreRound(chaos.resilienceScore, chaos.passed, step.metrics)
+    // Difficulty sets the survival threshold; harder tiers demand more resilience.
+    const passed = chaos.resilienceScore >= diff.passThreshold
+    const budgetPressure = game.budget > 0 ? game.spend / game.budget : 0
+    const points = scoreRound(
+      chaos.resilienceScore,
+      passed,
+      step.metrics,
+      budgetPressure,
+      diff.scoreMultiplier,
+    )
 
     const event: GameEvent = {
       id: nanoid(8),
@@ -50,9 +58,10 @@ export async function POST(
       disaster: kind,
       title: disaster.name,
       detail: chaos.summary,
-      passed: chaos.passed,
+      passed,
       resilienceScore: chaos.resilienceScore,
       pointsDelta: points,
+      surgeRPS,
       metrics: step.metrics,
     }
 

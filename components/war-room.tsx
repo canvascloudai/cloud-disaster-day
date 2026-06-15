@@ -2,7 +2,13 @@
 
 import { useState } from "react"
 import type { GameState } from "@/lib/types"
-import { DISASTERS, DISASTER_ORDER, AWS_SERVICES, SERVICE_BY_KEY } from "@/lib/catalog"
+import {
+  DISASTERS,
+  AWS_SERVICES,
+  SERVICE_BY_KEY,
+  DIFFICULTIES,
+  resourceCostPerHour,
+} from "@/lib/catalog"
 import { MetricsPanel } from "@/components/metrics-panel"
 import { ServiceIcon } from "@/components/service-icon"
 import { Button } from "@/components/ui/button"
@@ -39,17 +45,20 @@ export function WarRoom({
 }: {
   game: GameState
   busy: boolean
-  onDisaster: (kind: string) => void
+  onDisaster: () => void
   onDecision: (serviceKey: string, multiAz: boolean) => void
   onFinish: () => void
 }) {
   const [reinforceOpen, setReinforceOpen] = useState(false)
   const [multiAz, setMultiAz] = useState(false)
 
-  const nextKind = DISASTER_ORDER[game.events.length]
+  const nextKind = game.disasterQueue[game.events.length]
   const nextDisaster = nextKind ? DISASTERS[nextKind] : null
   const allDone = game.events.length >= game.totalRounds
   const metrics = game.metrics
+  const diff = DIFFICULTIES[game.difficulty] ?? DIFFICULTIES.operator
+  const remaining = Math.max(0, game.budget - game.spend)
+  const budgetPct = Math.min(100, (game.spend / game.budget) * 100)
 
   const pickService = (key: string) => {
     onDecision(key, multiAz)
@@ -77,6 +86,13 @@ export function WarRoom({
               {Math.min(game.events.length + (allDone ? 0 : 1), game.totalRounds)} / {game.totalRounds}
             </p>
           </div>
+          <div className="h-8 w-px bg-border" />
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              Tier
+            </p>
+            <p className="font-mono font-medium">{diff.name}</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {game.usedFallback && (
@@ -95,8 +111,30 @@ export function WarRoom({
         </div>
       </div>
 
-      <div className="mb-2">
-        <Progress value={(game.events.length / game.totalRounds) * 100} className="h-1.5" />
+      {/* Budget + round progress */}
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr]">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="font-mono uppercase tracking-wider text-muted-foreground">
+              Round progress
+            </span>
+            <span className="font-mono text-muted-foreground">
+              {game.events.length}/{game.totalRounds}
+            </span>
+          </div>
+          <Progress value={(game.events.length / game.totalRounds) * 100} className="h-1.5" />
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="font-mono uppercase tracking-wider text-muted-foreground">
+              Budget remaining
+            </span>
+            <span className="font-mono tabular-nums text-foreground">
+              ${remaining.toFixed(0)} / ${game.budget}/hr
+            </span>
+          </div>
+          <Progress value={budgetPct} className="h-1.5" />
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -157,9 +195,20 @@ export function WarRoom({
                       <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">
                         {nextDisaster.description}
                       </p>
-                      <p className="mt-2 font-mono text-xs text-muted-foreground">
-                        traffic surge ×{nextDisaster.trafficMultiplier}
-                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
+                        <span>
+                          traffic surge ×
+                          {(
+                            nextDisaster.trafficMultiplier *
+                            diff.trafficScale *
+                            (1 + game.events.length * diff.escalationStep)
+                          ).toFixed(1)}
+                        </span>
+                        {game.events.length > 0 && (
+                          <span className="text-warning">escalating</span>
+                        )}
+                        <span>survival ≥ {diff.passThreshold} resilience</span>
+                      </div>
                     </div>
                   </div>
 
@@ -181,25 +230,38 @@ export function WarRoom({
                             re-evaluates your design before the disaster hits.
                           </DialogDescription>
                         </DialogHeader>
-                        <label className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm">
-                          <span className="flex items-center gap-2">
+                        <div className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm">
+                          <span className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
                             <Wrench className="size-4 text-primary" />
-                            Deploy as Multi-AZ
+                            Budget left
                           </span>
+                          <span className="font-mono tabular-nums">
+                            ${remaining.toFixed(0)}/hr
+                          </span>
+                        </div>
+                        <label className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm">
+                          <span>Deploy as Multi-AZ (×2 cost)</span>
                           <Switch checked={multiAz} onCheckedChange={setMultiAz} />
                         </label>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {AWS_SERVICES.map((svc) => {
-                            const counters = svc
-                              ? nextDisaster.mitigatedBy.includes(svc.cwmType)
-                              : false
+                            const counters = nextDisaster.mitigatedBy.includes(svc.cwmType)
+                            const cost = resourceCostPerHour({
+                              serviceKey: svc.key,
+                              count: 1,
+                              multiAz,
+                            })
+                            const affordable = game.spend + cost <= game.budget
                             return (
                               <button
                                 key={svc.key}
                                 type="button"
+                                disabled={!affordable}
                                 onClick={() => pickService(svc.key)}
                                 className={cn(
-                                  "flex items-center gap-2 rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent",
+                                  "flex items-center gap-2 rounded-md border p-3 text-left text-sm transition-colors",
+                                  affordable && "hover:bg-accent",
+                                  !affordable && "cursor-not-allowed opacity-40",
                                   counters
                                     ? "border-success/50 bg-success/5"
                                     : "border-border bg-card",
@@ -207,6 +269,9 @@ export function WarRoom({
                               >
                                 <ServiceIcon type={svc.cwmType} className="size-4 text-primary" />
                                 <span className="flex-1 truncate">{svc.short}</span>
+                                <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                                  ${cost.toFixed(0)}
+                                </span>
                                 {counters && (
                                   <Badge
                                     variant="outline"
@@ -224,7 +289,7 @@ export function WarRoom({
 
                     <Button
                       className="flex-1 bg-critical text-destructive-foreground hover:bg-critical/90"
-                      onClick={() => onDisaster(nextDisaster.kind)}
+                      onClick={() => onDisaster()}
                       disabled={busy}
                     >
                       {busy ? (

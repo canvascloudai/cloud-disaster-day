@@ -20,6 +20,28 @@ export type DisasterKind =
 
 export type CostHint = "low" | "medium" | "high"
 
+/** Difficulty tiers that reshape budget, disaster count, and scoring. */
+export type Difficulty = "recruit" | "operator" | "chaos_lord"
+
+/** Tunable parameters for a difficulty tier. */
+export interface DifficultyConfig {
+  key: Difficulty
+  name: string
+  tagline: string
+  /** Operating budget ceiling in $/hr for the whole architecture. */
+  budget: number
+  /** Number of disasters thrown during the run. */
+  disasterCount: number
+  /** Global multiplier applied to each disaster's traffic surge. */
+  trafficScale: number
+  /** Per-round escalation added to traffic (round index * step). */
+  escalationStep: number
+  /** Minimum resilience score required to "survive" a disaster. */
+  passThreshold: number
+  /** Multiplier applied to points earned. */
+  scoreMultiplier: number
+}
+
 /** A selectable AWS service in the architecture catalog. */
 export interface ServiceDef {
   key: string
@@ -28,6 +50,8 @@ export interface ServiceDef {
   cwmType: CwmResourceType
   description: string
   costHint: CostHint
+  /** Operating cost in $/hr per node. Multi-AZ doubles this. */
+  costPerHour: number
 }
 
 /** A provisioned resource inside a player's architecture. */
@@ -74,6 +98,8 @@ export interface GameEvent {
   passed: boolean
   resilienceScore: number
   pointsDelta: number
+  /** Effective traffic surge (RPS) this round, after escalation. */
+  surgeRPS: number
   metrics: SimMetrics
 }
 
@@ -91,10 +117,17 @@ export interface GameState {
   id: string
   kind: "game"
   playerName: string
+  difficulty: Difficulty
   status: GameStatus
   architecture: ArchResource[]
   simulationId: string | null
   baselineRPS: number
+  /** Operating budget ceiling in $/hr for this run. */
+  budget: number
+  /** Current architecture spend in $/hr. */
+  spend: number
+  /** The randomized sequence of disasters for this run. */
+  disasterQueue: DisasterKind[]
   round: number
   totalRounds: number
   score: number
@@ -111,6 +144,7 @@ export interface ScoreEntry {
   id: string
   kind: "score"
   playerName: string
+  difficulty: Difficulty
   score: number
   resilience: number
   survived: number

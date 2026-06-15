@@ -37,6 +37,7 @@ export async function POST(
         id: nanoid(10),
         kind: "score",
         playerName: game.playerName,
+        difficulty: game.difficulty,
         score: game.score,
         resilience: avgResilience,
         survived,

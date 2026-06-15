@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import type { GameState } from "@/lib/types"
-import { DISASTERS } from "@/lib/catalog"
+import type { GameState, Difficulty } from "@/lib/types"
+import { DIFFICULTIES } from "@/lib/catalog"
 import { ArchitectureBuilder, type BuilderResource } from "@/components/architecture-builder"
 import { WarRoom } from "@/components/war-room"
 import { ResultsScreen } from "@/components/results-screen"
@@ -16,7 +16,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { CloudLightning, Trophy, ArrowRight, ShieldHalf, Activity, Boxes } from "lucide-react"
+import { cn } from "@/lib/utils"
+import {
+  CloudLightning,
+  Trophy,
+  ArrowRight,
+  ShieldHalf,
+  Activity,
+  Boxes,
+  Shield,
+  Swords,
+  Skull,
+  Wallet,
+} from "lucide-react"
 
 type Phase = "start" | "build" | "war" | "results"
 
@@ -29,6 +41,7 @@ const STARTER_STACK: BuilderResource[] = [
 export function DisasterDayGame() {
   const [phase, setPhase] = useState<Phase>("start")
   const [playerName, setPlayerName] = useState("")
+  const [difficulty, setDifficulty] = useState<Difficulty>("operator")
   const [resources, setResources] = useState<BuilderResource[]>(STARTER_STACK)
   const [game, setGame] = useState<GameState | null>(null)
   const [busy, setBusy] = useState(false)
@@ -41,6 +54,7 @@ export function DisasterDayGame() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           playerName,
+          difficulty,
           architecture: resources.map((r) => ({
             serviceKey: r.serviceKey,
             count: r.count,
@@ -64,23 +78,22 @@ export function DisasterDayGame() {
     }
   }
 
-  async function runDisaster(kind: string) {
+  async function runDisaster() {
     if (!game) return
     setBusy(true)
     try {
       const res = await fetch(`/api/game/${game.id}/disaster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disaster: kind }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Failed")
       setGame(data.game)
       const ev = data.event
       if (ev.passed) {
-        toast.success(`${DISASTERS[kind as keyof typeof DISASTERS].name} survived! +${ev.pointsDelta}`)
+        toast.success(`${ev.title} survived! +${ev.pointsDelta}`)
       } else {
-        toast.error(`${DISASTERS[kind as keyof typeof DISASTERS].name} caused an outage. +${ev.pointsDelta}`)
+        toast.error(`${ev.title} caused an outage. +${ev.pointsDelta}`)
       }
     } catch (err) {
       toast.error((err as Error).message)
@@ -136,14 +149,22 @@ export function DisasterDayGame() {
       <div className="scanlines min-h-dvh">
         <Header />
         <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6 sm:px-6">
-          {phase === "start" && <StartScreen onStart={() => setPhase("build")} />}
+          {phase === "start" && (
+            <StartScreen
+              difficulty={difficulty}
+              onDifficulty={setDifficulty}
+              onStart={() => setPhase("build")}
+            />
+          )}
           {phase === "build" && (
             <ArchitectureBuilder
               playerName={playerName}
               onPlayerName={setPlayerName}
+              difficulty={difficulty}
               resources={resources}
               onChange={setResources}
               onLaunch={launch}
+              onBack={() => setPhase("start")}
               launching={busy}
             />
           )}
@@ -156,6 +177,7 @@ export function DisasterDayGame() {
               onFinish={finish}
             />
           )}
+          {/* onDisaster now reads the next disaster from the server queue */}
           {phase === "results" && game && (
             <ResultsScreen
               game={game}
@@ -205,7 +227,36 @@ function Header() {
   )
 }
 
-function StartScreen({ onStart }: { onStart: () => void }) {
+const DIFFICULTY_META: Record<
+  Difficulty,
+  { icon: typeof Shield; accent: string; ring: string }
+> = {
+  recruit: {
+    icon: Shield,
+    accent: "text-success",
+    ring: "border-success/60 bg-success/5",
+  },
+  operator: {
+    icon: Swords,
+    accent: "text-primary",
+    ring: "border-primary/60 bg-primary/5",
+  },
+  chaos_lord: {
+    icon: Skull,
+    accent: "text-critical",
+    ring: "border-critical/60 bg-critical/5",
+  },
+}
+
+function StartScreen({
+  difficulty,
+  onDifficulty,
+  onStart,
+}: {
+  difficulty: Difficulty
+  onDifficulty: (d: Difficulty) => void
+  onStart: () => void
+}) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[1.2fr_1fr]">
       <div className="pt-6">
@@ -217,11 +268,45 @@ function StartScreen({ onStart }: { onStart: () => void }) {
           Build it. Break it. <span className="text-primary">Survive it.</span>
         </h1>
         <p className="mt-4 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground">
-          Design an AWS architecture, then defend it against six escalating
-          disasters — traffic spikes, DynamoDB throttling, region outages,
-          queue backlogs, database corruption, and cost explosions. The Cloud
-          World Model simulates every outcome. How long can your stack stay up?
+          Design an AWS architecture on a strict hourly budget, then defend it
+          against a randomized barrage of escalating disasters. The Cloud World
+          Model simulates every outcome. How long can your stack stay up?
         </p>
+
+        <div className="mt-7">
+          <p className="mb-3 font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Select threat level
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(Object.values(DIFFICULTIES)).map((d) => {
+              const meta = DIFFICULTY_META[d.key]
+              const Icon = meta.icon
+              const active = difficulty === d.key
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => onDifficulty(d.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-lg border p-4 text-left transition-colors",
+                    active ? meta.ring : "border-border bg-card hover:border-primary/40",
+                  )}
+                >
+                  <Icon className={cn("size-5", meta.accent)} />
+                  <p className="mt-2 text-sm font-semibold">{d.name}</p>
+                  <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                    {d.tagline}
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                    <Wallet className="size-3.5" />${d.budget}/hr · {d.disasterCount} disasters · {d.scoreMultiplier}× pts
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <Button size="lg" className="mt-6" onClick={onStart}>
           Start Building
           <ArrowRight className="size-4" />
@@ -229,7 +314,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <Feature icon={Boxes} title="11 AWS services" desc="Compose compute, data, edge, cache and more." />
-          <Feature icon={ShieldHalf} title="6 disasters" desc="Chaos scenarios scored for resilience." />
+          <Feature icon={ShieldHalf} title="Randomized chaos" desc="A fresh disaster order every single run." />
           <Feature icon={Activity} title="Live telemetry" desc="Latency, errors and cost in real time." />
         </div>
       </div>

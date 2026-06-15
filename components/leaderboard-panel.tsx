@@ -3,6 +3,7 @@
 import useSWR from "swr"
 import type { ScoreEntry } from "@/lib/types"
 import { grade } from "@/lib/scoring"
+import { DIFFICULTIES } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
 import { Loader2, Trophy, Medal } from "lucide-react"
 
@@ -57,7 +58,8 @@ export function LeaderboardPanel({ highlightId }: { highlightId?: string }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{e.playerName}</p>
                 <p className="font-mono text-xs text-muted-foreground">
-                  {e.survived}/{e.totalDisasters} survived · {e.avgLatency}ms p95
+                  {DIFFICULTIES[e.difficulty]?.name ?? "Operator"} · {e.survived}/
+                  {e.totalDisasters} survived · {e.avgLatency}ms p95
                 </p>
               </div>
               <span className="font-mono text-xs text-muted-foreground">
